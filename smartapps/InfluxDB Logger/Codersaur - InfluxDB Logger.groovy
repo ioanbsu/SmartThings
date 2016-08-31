@@ -18,7 +18,7 @@
  *   command code at the end of this file.
  *
  *  Version History:
- *   
+ *
  *   2016-04-04: v1.05
  *    - Added subscription to 'scheduledSetpoint', 'optimisation', and 'windowFunction' custom attributes for Evohome thermostats.
  *    - Added handling of many new string value events.
@@ -42,10 +42,10 @@
  *    - Sends the following tags: device, group, unit.
  *    - Event.name now maps to the 'measurement' name.
  *    - Headers and path are stored as state (to avoid recalculating on every event).
- * 
+ *
  *   2016-02-28: v1.00
  *    - Inital Version
- * 
+ *
  *  To Do:
  *   - Parse ThreeAxis events into x/y/z values.
  *   - Custom icon.
@@ -82,11 +82,11 @@ preferences {
 		input "prefDatabasePort", "text", title: "Port", defaultValue: "8086", required: true
 		input "prefDatabaseName", "text", title: "Database Name", defaultValue: "", required: true
 	}
-	
+
 	section("Polling:") {
 		input "prefSoftPollingInterval", "number", title:"Soft-Polling interval (minutes)", defaultValue: 10, required: true
 	}
-	
+
 	section("Devices To Monitor:") {
 		input "accelerometers", "capability.accelerationSensor", title: "Accelerometers", multiple: true, required: false
 		input "alarms", "capability.alarm", title: "Alarms", multiple: true, required: false
@@ -133,7 +133,7 @@ def installed() {
 
 	state.installedAt = now()
 	log.debug "${app.label}: Installed with settings: ${settings}"
-	
+
 }
 
 
@@ -150,9 +150,9 @@ def uninstalled() {
 
 /**
  *  updated()
- * 
+ *
  *  Runs when app settings are changed.
- * 
+ *
  *  Updates device.state with input values and other hard-coded values.
  *  Builds state.deviceAttributes which describes the attributes that will be
  *  monitored for each device collection (used by manageSubscriptions() and softPoll()).
@@ -165,19 +165,19 @@ def updated() {
 
 	// Update internal state:
 	state.debug = settings.prefDebugMode
-	
+
 	// Database config:
 	state.databaseHost = settings.prefDatabaseHost
 	state.databasePort = settings.prefDatabasePort
 	state.databaseName = settings.prefDatabaseName
-	
+
 	state.path = "/write?db=${state.databaseName}"
-	state.headers = [:] 
+	state.headers = [:]
 	state.headers.put("HOST", "${state.databaseHost}:${state.databasePort}")
 	state.headers.put("Content-Type", "application/x-www-form-urlencoded")
 
 	// Build array of device collections and the attributes we want to report on for that collection:
-	//  Note, the collection names are stored as strings. Adding references to the actual collection 
+	//  Note, the collection names are stored as strings. Adding references to the actual collection
     //  objects causes major issues (possibly memory issues?).
 	state.deviceAttributes = []
 	state.deviceAttributes << [ devices: 'accelerometers', attributes: ['acceleration']]
@@ -210,7 +210,7 @@ def updated() {
 	// Configure Scheduling:
 	state.softPollingInterval = settings.prefSoftPollingInterval.toInteger()
 	manageSchedules()
-	
+
 	// Configure Subscriptions:
 	manageSubscriptions()
 
@@ -225,7 +225,7 @@ def updated() {
 
 /**
  *  manageSchedules()
- * 
+ *
  *  Configures/restarts scheduled tasks: 
  *   softPoll() - Run every {state.softPollingInterval} minutes.
  *
@@ -237,7 +237,7 @@ def manageSchedules() {
 	// Generate a random offset (1-60):
 	Random rand = new Random(now())
 	def randomOffset = 0
-	
+
 	// softPoll:
 	try {
 		unschedule(softPoll)
@@ -251,15 +251,15 @@ def manageSchedules() {
 		if (state.debug) log.debug "${app.label}: Scheduling softpoll to run every ${state.softPollingInterval} minutes (offset of ${randomOffset} seconds)."
 		schedule("${randomOffset} 0/${state.softPollingInterval} * * * ?", "softPoll")
 	}
-	
+
 }
 
 
 /**
  *  manageSubscriptions()
- * 
+ *
  *  Configures subscriptions.
- * 
+ *
  *  Loops over state.deviceAttributes to configure subscriptions for all attributes.
  *
  **/
@@ -269,10 +269,10 @@ def manageSubscriptions() {
 
 	// Unsubscribe:
 	unsubscribe()
-	
+
 	// Subscribe to App Touch events:
 	subscribe(app,handleAppTouch)
-	
+
 	// Subscribe to device attributes (iterate over each attribute for each device collection in state.deviceAttributes):
 	def devs // dynamic variable holding device collection.
 	state.deviceAttributes.each { da ->
@@ -295,16 +295,16 @@ def manageSubscriptions() {
 
 /**
  *  handleAppTouch(evt)
- * 
+ *
  *  Used for testing.
  *
  **/
 def handleAppTouch(evt) {
 
 	log.debug "${app.label}: handleAppTouch()"
-	
+
     softPoll()
-	
+
 }
 
 
@@ -315,7 +315,7 @@ def handleAppTouch(evt) {
  *   - Escapes and quotes string values.
  *   - Calculates logical binary values where string values can be 
  *     represented as binary values (e.g. contact: closed = 1, open = 0)
- * 
+ *
  *  Useful references: 
  *   - http://docs.smartthings.com/en/latest/capabilities-reference.html
  *   - https://docs.influxdata.com/influxdb/v0.10/guides/writing_data/
@@ -324,7 +324,7 @@ def handleAppTouch(evt) {
 def handleEvent(evt) {
 
 	if (state.debug) log.debug "${app.label}: handleEvent(): $evt.displayName($evt.name:$evt.unit) $evt.value"
-	
+
 	// Default data formatting:
 	//  <meansurement>[,tag_name=tag_value] value=<value>
 	//  If value is an integer, it must have a trailing "i"
@@ -336,9 +336,9 @@ def handleEvent(evt) {
 	def unit = escapeStringForInfluxDB(evt.unit)
 	def value = escapeStringForInfluxDB(evt.value)
 	def valueBinary = ''
-	
+
 	def data = "${measurement},deviceId=${deviceId},deviceName=${deviceName},groupName=${groupName},unit=${unit} value=${value}"
-	
+
 	// Special data formatting for certain event types:
     //  E.g. Most string-valued attributes can be translated to a binary value too.
 	if ('acceleration' == evt.name) { // acceleration: Calculate a binary value (active = 1, inactive = 0)
@@ -485,13 +485,19 @@ def handleEvent(evt) {
 		valueBinary = ('closed' == evt.value) ? '1i' : '0i'
 		data = "${measurement},deviceId=${deviceId},deviceName=${deviceName},groupName=${groupName},unit=${unit} value=${value},valueBinary=${valueBinary}"
 	}
+    else if ('color' == evt.name) { // windowShade: Calculate a binary value (closed = 1, <any other value> = 0)
+		unit = 'color'
+		value = '"' + value + '"'
+        intValue = '"' + (value as int) + '"'
+        data = "${measurement},deviceId=${deviceId},deviceName=${deviceName},groupName=${groupName},unit=${unit} value=${value},intValue=${intValue}"
+	}
     // Catch any other event with a string value that hasn't been handled:
     else if (evt.value ==~ /.*[^0-9\.,-].*/) { // match if any characters are not digits, period, comma, or hyphen.
 		log.warn "${app.label}: handleEvent(): Found a string value that's not explicitly handled: Device Name: ${deviceName}, Event Name: ${evt.name}, Value: ${evt.value}"
 		value = '"' + value + '"'
 		data = "${measurement},deviceId=${deviceId},deviceName=${deviceName},groupName=${groupName},unit=${unit} value=${value}"
 	}
-	
+
 	// Post data to InfluxDB:
 	postToInfluxDB(data)
 
@@ -505,7 +511,7 @@ def handleEvent(evt) {
 
 /**
  *  softPoll()
- * 
+ *
  *  Forces data to be posted to InfluxDB (even if an event has not been triggered).
  *  Doesn't poll devices, just builds a fake event to pass to handleEvent().
  *
@@ -513,7 +519,7 @@ def handleEvent(evt) {
 def softPoll() {
 
 	log.info "${app.label}: Softpoll()"
-	   
+
 	// Iterate over each attribute for each device, in each device collection in deviceAttributes:
 	def devs // temp variable to hold device collection.
 	state.deviceAttributes.each { da ->
@@ -525,7 +531,7 @@ def softPoll() {
 						if (state.debug) log.debug "${app.label}: Softpoll(): Softpolling device ${d} for attribute: ${attr}"
 						// Send fake event to handleEvent():
 						handleEvent([
-							name: attr, 
+							name: attr,
 							value: d.latestState(attr)?.value,
 							unit: d.latestState(attr)?.unit,
 							device: d,
@@ -553,36 +559,36 @@ def softPoll() {
  **/
 def postToInfluxDB(data) {
 
-	log.info "${app.label}: postToInfluxDB(): Posting data to InfluxDB: Host: ${state.databaseHost}, Port: ${state.databasePort}, Database: ${state.databaseName}, Data: [${data}]"
-	
-	try {
-	    def hubAction = new physicalgraph.device.HubAction(
-	        method: "POST",
-	        path: state.path,
-	        body: data,
-	        headers: state.headers,
-	    )
-	    //log.debug hubAction
-	    sendHubCommand(hubAction)
-	}
-	catch (Exception e) {
-	    log.debug "Exception $e on $hubAction"
-	}
+//	log.info "${app.label}: postToInfluxDB(): Posting data to InfluxDB: Host: ${state.databaseHost}, Port: ${state.databasePort}, Database: ${state.databaseName}, Data: [${data}]"
+//
+//	try {
+//	    def hubAction = new physicalgraph.device.HubAction(
+//	        method: "POST",
+//	        path: state.path,
+//	        body: data,
+//	        headers: state.headers,
+//	    )
+//	    //log.debug hubAction
+//	    sendHubCommand(hubAction)
+//	}
+//	catch (Exception e) {
+//	    log.debug "Exception $e on $hubAction"
+//	}
 
 	// For reference, code that could be used for WAN hosts:
 	// This has the advantage of exposing the response.
-	// def url = "http://${state.databaseHost}:${state.databasePost}/write?db=${state.databaseName}" 
-	//    try {
-	//    	httpPost(url, data) { response ->
-	//        	if (response.status != 999 ) {
-	//        		log.debug "Response Status: ${response.status}"
-	//        		log.debug "Response data: ${response.data}"
-	//        		log.debug "Response contentType: ${response.contentType}"
-	//            }
-	//    	}
-	//	} catch (e) {
-	//    	log.debug "Something went wrong when posting: $e"
-	//	}
+    def url = "http://${state.databaseHost}:${state.databasePort}/write?db=${state.databaseName}"
+    try {
+        httpPost(url, data) { response ->
+            if (response.status != 999) {
+                log.debug "Response Status: ${response.status}"
+                log.debug "Response data: ${response.data}"
+                log.debug "Response contentType: ${response.contentType}"
+            }
+        }
+    } catch (e) {
+        log.debug "Something went wrong when posting: $e"
+    }
 }
 
 
@@ -594,7 +600,7 @@ def postToInfluxDB(data) {
  *  escapeStringForInfluxDB()
  *
  *  Escape values to InfluxDB.
- *  
+ *
  *  If a tag key, tag value, or field key contains a space, comma, or an equals sign = it must 
  *  be escaped using the backslash character \. Backslash characters do not need to be escaped. 
  *  Commas and spaces will also need to be escaped for measurements, though equals signs = do not.
@@ -619,10 +625,10 @@ private escapeStringForInfluxDB(str) {
  *  getGroupName()
  *
  *  Get the name of a 'Group' (i.e. Room) from its ID.
- *  
+ *
  *  This is done manually as there does not appear to be a way to enumerate
  *  groups from a SmartApp currently.
- * 
+ *
  *  GroupIds can be obtained from the SmartThings IDE under 'My Locations'.
  *
  *  See: https://community.smartthings.com/t/accessing-group-within-a-smartapp/6830
@@ -634,5 +640,5 @@ private getGroupName(id) {
 	else if (id == 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX') {return 'Kitchen'}
 	else if (id == 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX') {return 'Lounge'}
 	else if (id == 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX') {return 'Office'}
-	else {return 'Unknown'}    
+	else {return 'Unknown'}
 }
