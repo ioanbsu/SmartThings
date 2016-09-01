@@ -488,8 +488,7 @@ def handleEvent(evt) {
     else if ('color' == evt.name) { // windowShade: Calculate a binary value (closed = 1, <any other value> = 0)
 		unit = 'color'
 		value = '"' + value + '"'
-        intValue = '"' + (value as int) + '"'
-        data = "${measurement},deviceId=${deviceId},deviceName=${deviceName},groupName=${groupName},unit=${unit} value=${value},intValue=${intValue}"
+        data = "${measurement},deviceId=${deviceId},deviceName=${deviceName},groupName=${groupName},unit=${unit} value=${value}"
 	}
     // Catch any other event with a string value that hasn't been handled:
     else if (evt.value ==~ /.*[^0-9\.,-].*/) { // match if any characters are not digits, period, comma, or hyphen.
@@ -577,18 +576,22 @@ def postToInfluxDB(data) {
 
 	// For reference, code that could be used for WAN hosts:
 	// This has the advantage of exposing the response.
-    def url = "http://${state.databaseHost}:${state.databasePort}/write?db=${state.databaseName}"
-    try {
-        httpPost(url, data) { response ->
-            if (response.status != 999) {
-                log.debug "Response Status: ${response.status}"
-                log.debug "Response data: ${response.data}"
-                log.debug "Response contentType: ${response.contentType}"
-            }
-        }
-    } catch (e) {
-        log.debug "Something went wrong when posting: $e"
-    }
+	def url = "http://${state.databaseHost}:${state.databasePort}/write?db=${state.databaseName}"
+	try {
+		httpPost(url, data) { response ->
+			if(state.debug){
+				if(response.data == 204){
+					log.debug "Response: ${response}"
+				}else if (response.status != 999) {
+					log.debug "Response Status: ${response.status}"
+					log.debug "Response data: ${response.data}"
+					log.debug "Response contentType: ${response.contentType}"
+				}
+			}
+		}
+	} catch (e) {
+		log.debug "Something went wrong when posting: $e"
+	}
 }
 
 
