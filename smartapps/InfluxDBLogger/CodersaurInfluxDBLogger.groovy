@@ -19,6 +19,9 @@
  *
  *  Version History:
  *
+ *   2017-15-01: v1.06
+ *   Added support for influxDB login and password to make the DB sommunication more secure.
+ *
  *   2016-04-04: v1.05
  *    - Added subscription to 'scheduledSetpoint', 'optimisation', and 'windowFunction' custom attributes for Evohome thermostats.
  *    - Added handling of many new string value events.
@@ -81,6 +84,9 @@ preferences {
 		input "prefDatabaseHost", "text", title: "Host", defaultValue: "10.10.10.10", required: true
 		input "prefDatabasePort", "text", title: "Port", defaultValue: "8086", required: true
 		input "prefDatabaseName", "text", title: "Database Name", defaultValue: "", required: true
+		input "prefDatabaseUserName", "text", title: "Database User Name", defaultValue: "", required: false
+		input "prefDatabasePassword", "password", title: "Database password", defaultValue: "", required: false
+
 	}
 
 	section("Polling:") {
@@ -170,6 +176,8 @@ def updated() {
 	state.databaseHost = settings.prefDatabaseHost
 	state.databasePort = settings.prefDatabasePort
 	state.databaseName = settings.prefDatabaseName
+	state.prefDatabaseUserName = settings.prefDatabaseUserName
+	state.prefDatabasePassword = settings.prefDatabasePassword
 
 	state.path = "/write?db=${state.databaseName}"
 	state.headers = [:]
@@ -577,11 +585,20 @@ def postToInfluxDB(data) {
 	// For reference, code that could be used for WAN hosts:
 	// This has the advantage of exposing the response.
 	def url = "http://${state.databaseHost}:${state.databasePort}/write?db=${state.databaseName}"
+	if (state.prefDatabaseUserName != null && !state.prefDatabasePassword != null) {
+		url="${url}&u=${state.prefDatabaseUserName}&p=${state.prefDatabasePassword}"
+	}
+	if (state.debug) {
+		log.info "The full connect url: ${url}"
+	}
 	try {
 		httpPost(url, data) { response ->
 			if(state.debug){
-				if(response.data == 204){
-					log.debug "Response: ${response}"
+				if(response.status == 204){
+					log.debug "Response Code is 204. Printing response Headers..."
+					response.headers.each { h ->
+						log.debug " ${h.name} : ${h.value}"
+					}
 				}else if (response.status != 999) {
 					log.debug "Response Status: ${response.status}"
 					log.debug "Response data: ${response.data}"
