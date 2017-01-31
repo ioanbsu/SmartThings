@@ -217,7 +217,7 @@ def updated() {
 
 	// Configure Scheduling:
 	state.softPollingInterval = settings.prefSoftPollingInterval.toInteger()
-	manageSchedules()
+	softPoll()
 
 	// Configure Subscriptions:
 	manageSubscriptions()
@@ -230,38 +230,6 @@ def updated() {
 /**********************************************************************
  *  Management Commands:
  **********************************************************************/
-
-/**
- *  manageSchedules()
- *
- *  Configures/restarts scheduled tasks: 
- *   softPoll() - Run every {state.softPollingInterval} minutes.
- *
- **/
-def manageSchedules() {
-
-	if (state.debug) log.debug "${app.label}: manageSchedules()"
-
-	// Generate a random offset (1-60):
-	Random rand = new Random(now())
-	def randomOffset = 0
-
-	// softPoll:
-	try {
-		unschedule(softPoll)
-	}
-	catch(e) {
-		//if (state.debug) log.debug "${app.label}: Unschedule failed."
-	}
-
-	if (state.softPollingInterval > 0) {
-		randomOffset = rand.nextInt(60)
-		if (state.debug) log.debug "${app.label}: Scheduling softpoll to run every ${state.softPollingInterval} minutes (offset of ${randomOffset} seconds)."
-		schedule("${randomOffset} 0/${state.softPollingInterval} * * * ?", "softPoll")
-	}
-
-}
-
 
 /**
  *  manageSubscriptions()
@@ -515,17 +483,17 @@ def handleEvent(evt) {
  *  Main Commands:
  **********************************************************************/
 
-
 /**
  *  softPoll()
  *
  *  Forces data to be posted to InfluxDB (even if an event has not been triggered).
  *  Doesn't poll devices, just builds a fake event to pass to handleEvent().
- *
+ *  Automatically schedules itself to be re-ran in softPollingInterval. If ran manually, then already scheduled re-run
+ *  will be overridden with new scheduled run.
  **/
 def softPoll() {
 
-	log.info "${app.label}: Softpoll()"
+	log.info "${app.label}: Softpoll(). Interval: ${state.softPollingInterval}"
 
 	// Iterate over each attribute for each device, in each device collection in deviceAttributes:
 	def devs // temp variable to hold device collection.
@@ -538,12 +506,12 @@ def softPoll() {
 						if (state.debug) log.debug "${app.label}: Softpoll(): Softpolling device ${d} for attribute: ${attr}"
 						// Send fake event to handleEvent():
 						handleEvent([
-							name: attr,
-							value: d.latestState(attr)?.value,
-							unit: d.latestState(attr)?.unit,
-							device: d,
-							deviceId: d.id,
-							displayName: d.displayName
+								name       : attr,
+								value      : d.latestState(attr)?.value,
+								unit       : d.latestState(attr)?.unit,
+								device     : d,
+								deviceId   : d.id,
+								displayName: d.displayName
 						])
 					}
 				}
@@ -551,9 +519,15 @@ def softPoll() {
 		}
 	}
 
+	if (state.softPollingInterval > 0) {
+		Random rand = new Random(now())
+		def randomOffset = rand.nextInt(60)
+		if (state.debug) {
+			log.debug "${app.label}: Scheduling softpoll to run every ${state.softPollingInterval} minutes (offset of ${randomOffset} seconds)."
+		}
+		runIn(state.softPollingInterval * 60 + randomOffset, softPoll)
+	}
 }
-
-
 
 /**
  *  postToInfluxDB()
@@ -589,7 +563,7 @@ def postToInfluxDB(data) {
 		url="${url}&u=${state.prefDatabaseUserName}&p=${state.prefDatabasePassword}"
 	}
 	if (state.debug) {
-		log.info "The full connect url: ${url}"
+		log.debug "The full connect url: ${url}"
 	}
 	try {
 		httpPost(url, data) { response ->
